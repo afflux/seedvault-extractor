@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -103,9 +101,9 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "error: failed to decrypt metadata: %s\n", err)
 		os.Exit(1)
 	}
-	if debug {
-		fmt.Printf("metadata: %s\n", string(metadataBytes))
-	}
+		fmt.Printf("%s\n", string(metadataBytes))
+
+
 
 	var metadataMap map[string]json.RawMessage
 	if err := json.Unmarshal(metadataBytes, &metadataMap); err != nil {
@@ -147,65 +145,10 @@ func main() {
 			if err := json.Unmarshal(packageMetaBytes, &packageMeta); err != nil {
 				return fmt.Errorf("failed to unmarshal metadata: %w", err)
 			}
-			if packageMeta.State != "" {
-				fmt.Printf("skipping %q (unsupported state %q)\n", packageName, packageMeta.State)
-				return nil
-			}
-			if packageMeta.BackupType != "KV" && packageMeta.BackupType != "FULL" {
-				fmt.Printf("skipping %q (unsupported backup type %q)\n", packageName, packageMeta.BackupType)
-				return nil
-			}
 
 			h := sha256.Sum256([]byte(metadataMeta.Salt + packageName))
-			packagePath := filepath.Join(backupPath, base64.RawURLEncoding.EncodeToString(h[:]))
-			packageFile, err := os.Open(packagePath)
-			if err != nil {
-				return fmt.Errorf("failed to open %q: %w", packagePath, err)
-			}
-			defer func() {
-				_ = packageFile.Close()
-			}()
-
-			packageReader := bufio.NewReader(packageFile)
-			packageVersion, err := packageReader.ReadByte()
-			if err != nil {
-				return fmt.Errorf("failed to read version from %q: %w", packagePath, err)
-			}
-			if packageVersion != version {
-				return fmt.Errorf("%q version %d does not match metadata file version %d", packagePath, packageVersion, version)
-			}
-
-			var type_ byte
-			if packageMeta.BackupType == "KV" {
-				type_ = typeKVBackup
-			} else {
-				type_ = typeFullBackup
-			}
-
-			packageBytes, err := decrypt(packageReader, key, getAdditionalData(version, type_, packageName))
-			if err != nil {
-				return fmt.Errorf("failed to decrypt %q: %w", packagePath, err)
-			}
-
-			var ext string
-			if packageMeta.BackupType == "KV" {
-				r, err := gzip.NewReader(bytes.NewReader(packageBytes))
-				if err != nil {
-					return fmt.Errorf("failed to decompress %q: %w", packagePath, err)
-				}
-				if packageBytes, err = io.ReadAll(r); err != nil {
-					return fmt.Errorf("failed to decompress %q: %w", packagePath, err)
-				}
-				ext = ".sqlite"
-			} else {
-				ext = ".tar"
-			}
-
-			outPath := packageName + ext
-			if err := os.WriteFile(outPath, packageBytes, 0777); err != nil {
-				return fmt.Errorf("failed to write %q: %w", outPath, err)
-			}
-			fmt.Println(outPath)
+			packagePath := base64.RawURLEncoding.EncodeToString(h[:])
+			fmt.Printf("package %s: %s\n", packageName, packagePath)
 			return nil
 		}()
 		if err != nil {
